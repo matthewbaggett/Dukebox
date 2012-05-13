@@ -2,7 +2,7 @@
 
 class DukeService{
 	static private $ip = '0.0.0.0';
-	static private $port = 3783;
+	static private self::$port = 3783;
 	
 	static private $instance = null;
 	
@@ -34,7 +34,7 @@ class DukeService{
 		    echo "socket_create() failed: reason: " . socket_strerror(socket_last_error()) . "\n";
 		}
 		
-		if (socket_bind($this->sock, $address, $port) === false) {
+		if (socket_bind($this->sock, self::$address, self::$port) === false) {
 		    echo "socket_bind() failed: reason: " . socket_strerror(socket_last_error($this->sock)) . "\n";
 		}
 		
