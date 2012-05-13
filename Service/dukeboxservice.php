@@ -1,98 +1,59 @@
+#!/usr/local/bin/php -q
 <?php
-error_reporting(1);
-ini_set('display_errors', '1');
+error_reporting(E_ALL);
 
-$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-$max_clients = 10;
+/* Allow the script to hang around waiting for connections. */
+set_time_limit(0);
 
-socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1);
-socket_bind($socket, 0, 3783);
-socket_listen($socket, $max_clients);
+/* Turn on implicit output flushing so we see what we're getting
+ * as it comes in. */
+ob_implicit_flush();
 
-$clients = array('0' => array('socket' => $socket));
+$address = '0.0.0.0';
+$port = 3783;
 
-while(TRUE)
-{
-	$read[0] = $socket;
-
-	for($i=1; $i<count($clients) + 1; ++$i)
-	{
-		if($clients[$i] != NULL)
-		{
-			$read[$i+1] = $clients[$i]['socket'];
-		}
-	}
-
-	$ready = socket_select($read, $write = NULL, $except = NULL, $tv_sec = NULL);
-
-	if(in_array($socket, $read))
-	{
-		for($i=1; $i < $max_clients+1; ++$i)
-		{
-			if(!isset($clients[$i]))
-			{
-				$clients[$i]['socket'] = socket_accept($socket);
-
-				socket_getpeername($clients[$i]['socket'],$ip);
-
-				$clients[$i]['ipaddy'] = $ip;
-
-				socket_write($clients[$i]['socket'], 'Welcome to my Custom Socket Server'."\r\n");
-				socket_write($clients[$i]['socket'], 'There are '.(count($clients) - 1).' client(s) connected to this server.'."\r\n");
-
-				echo 'New client connected: ' . $clients[$i]['ipaddy'] .' ';
-				break;
-			}
-			elseif($i == $max_clients - 1)
-			{
-				echo 'To many Clients connected!'."\r\n";
-			}
-
-			if($ready < 1)
-			{
-				continue;
-			}
-		}
-	}
-
-	for($i=1; $i<$max_clients+1; ++$i)
-	{
-		if(in_array($clients[$i]['socket'], $read))
-		{
-			$data = @socket_read($clients[$i]['socket'], 1024, PHP_NORMAL_READ);
-
-			if($data === FALSE)
-			{
-				unset($clients[$i]);
-				echo 'Client disconnected!',"\r\n";
-				continue;
-			}
-
-			$data = trim($data);
-
-			if(!empty($data))
-			{
-				if($data == 'exit')
-				{
-					socket_write($clients[$i]['socket'], 'Thanks for trying my Custom Socket Server, goodbye.'."\n");
-					echo 'Client ',$i,' is exiting.',"\n";
-					unset($clients[$i]);
-					continue;
-				}
-
-				for($j=1; $j<$max_clients+1; ++$j)
-				{
-					if(isset($clients[$j]['socket']))
-					{
-						if(($clients[$j]['socket'] != $clients[$i]['socket']) && ($clients[$j]['socket'] != $socket))
-						{
-							echo($clients[$i]['ipaddy'] . ' is sending a message!'."\r\n");
-							socket_write($clients[$j]['socket'], '[' . $clients[$i]['ipaddy'] . '] says: ' . $data . "\r\n");
-						}
-					}
-				}
-				break;
-			}
-		}
-	}
+if (($sock = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)) === false) {
+    echo "socket_create() failed: reason: " . socket_strerror(socket_last_error()) . "\n";
 }
+
+if (socket_bind($sock, $address, $port) === false) {
+    echo "socket_bind() failed: reason: " . socket_strerror(socket_last_error($sock)) . "\n";
+}
+
+if (socket_listen($sock, 5) === false) {
+    echo "socket_listen() failed: reason: " . socket_strerror(socket_last_error($sock)) . "\n";
+}
+
+do {
+    if (($msgsock = socket_accept($sock)) === false) {
+        echo "socket_accept() failed: reason: " . socket_strerror(socket_last_error($sock)) . "\n";
+        break;
+    }
+    /* Send instructions. */
+    $msg = "\nWelcome to the PHP Test Server. \n" .
+        "To quit, type 'quit'. To shut down the server type 'shutdown'.\n";
+    socket_write($msgsock, $msg, strlen($msg));
+
+    do {
+        if (false === ($buf = socket_read($msgsock, 2048, PHP_NORMAL_READ))) {
+            echo "socket_read() failed: reason: " . socket_strerror(socket_last_error($msgsock)) . "\n";
+            break 2;
+        }
+        if (!$buf = trim($buf)) {
+            continue;
+        }
+        if ($buf == 'quit') {
+            break;
+        }
+        if ($buf == 'shutdown') {
+            socket_close($msgsock);
+            break 2;
+        }
+        $talkback = "PHP: You said '$buf'.\n";
+        socket_write($msgsock, $talkback, strlen($talkback));
+        echo "$buf\n";
+    } while (true);
+    socket_close($msgsock);
+} while (true);
+
+socket_close($sock);
